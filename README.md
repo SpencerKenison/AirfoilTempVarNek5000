@@ -2,7 +2,9 @@
 
 This repository contains the necessary files to run a systematic study of an airfoil using the **Nek5000** incompressible Navier-Stokes solver. The workflow automates the generation of test cases, execution of the simulations, and post-processing of lift and drag coefficients.
 
-## Simulation OverviewThe simulations are set up for **2D Incompressible Navier-Stokes with Heat Transfer** on an airfoil (likely a NACA 4-digit profile, such as the NACA 2412 indicated in `template.par`).
+## Simulation Overview
+
+The simulations are set up for **2D Incompressible Navier-Stokes with Heat Transfer** on an airfoil (likely a NACA 4-digit profile, such as the NACA 2412 indicated in `template.par`).
 
 The test matrix explores a combination of:
 
@@ -21,7 +23,8 @@ pip install pandas matplotlib
 
 
 
-## File Structure| File Name | Description |
+## File Structure
+| File Name | Description |
 | --- | --- |
 | `run_cases_local.sh` | **Main execution script.** Reads `test_matrix.txt`, prepares case directories, modifies the `.par` file with correct Re and AoA, and executes `genmap`, `makenek`, and `nekmpi`. |
 | `gen_test_mat.sh` | **Test matrix generator.** Shell script that prints a list of (Reynolds Number, Mesh File) pairs to standard output, which is typically piped to `test_matrix.txt`. |
@@ -32,7 +35,9 @@ pip install pandas matplotlib
 | `mesh##.re2` | Nek5000 geometry/mesh files. The `##` is interpreted by the run script to be the Angle of Attack (\alpha) in degrees. |
 | `plot_data_summary.py` | **Post-processing script.** Reads the extracted drag/lift CSV files from the `results/` directory and generates summary plots. |
 
-## WorkflowFollow these steps to generate and run the test matrix, and then visualize the results:
+## Workflow
+
+Follow these steps to generate and run the test matrix, and then visualize the results:
 
 ### 1. Generate the Test MatrixThe `gen_test_mat.sh` script generates the list of cases to run.
 
@@ -45,7 +50,9 @@ chmod +x gen_test_mat.sh
 
 ```
 
-### 2. Run the SimulationsThe `run_cases_local.sh` script will create a new subdirectory (`results/ReXX_AOAXX/`) for each case defined in `test_matrix.txt`, execute the simulation, and extract the coefficients.
+### 2. Run the Simulations
+
+The `run_cases_local.sh` script will create a new subdirectory (`results/ReXX_AOAXX/`) for each case defined in `test_matrix.txt`, execute the simulation, and extract the coefficients.
 
 **Note:** Ensure all template files (`.par`, `.usr`, `SIZE`, and all `.re2` meshes) are in the same directory as the script before running.
 
@@ -58,14 +65,18 @@ chmod +x run_cases_local.sh
 
 ```
 
-### 3. Analyze and Plot ResultsThe Python script reads the `.csv` output files generated during the simulation runs and creates summary plots. The plots will be saved in the `results/` directory.
+### 3. Analyze and Plot Results
+
+The Python script reads the `.csv` output files generated during the simulation runs and creates summary plots. The plots will be saved in the `results/` directory.
 
 ```bash
 python3 plot_data_summary.py
 
 ```
 
-## ResultsAfter execution, the `results/` directory will contain:
+## Results
+
+After execution, the `results/` directory will contain:
 
 * **Case Directories**: Subdirectories named `ReXXX_AOAXX` (e.g., `Re100_AOA00`, `Re1000_AOA12`), each containing the simulation files, log file, and coefficient CSVs (`drag_...csv`, `lift_...csv`).
 * **Plot Images**: PNG files summarizing the study:
