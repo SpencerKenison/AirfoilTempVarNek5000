@@ -1,0 +1,44 @@
+#
+# airfoil par file
+#
+
+[GENERAL]
+#startFrom = "restart.fld"
+stopAt = endTime    	# Specifies whether to stop after a given number of time steps (numSteps) or at a given physical time (endTime)
+endTime = 0.2           # Physical time to end
+#numSteps = 10000       # Total iterations, number of time steps
+dt = 1.0e-2		        # Maximum time step-size
+variableDT = yes	    # Decides fixed or variable time-stepping (in steady problems, can be useful to run a simulation for a small amount of time to see what dt it settles in to, then choose a constant dt slightly lower)
+initialDT = 1.0e-5		# Specifies the starting timestepping value in variableDT schemes.
+targetCFL = 0.5			# Target CFL value for variable dt, or maxiumum CFL before premature exit for fixed dt
+writeControl = runTime  # Specify writeInterval to be physical time or number of time steps. runTime is physical time, timeStep is number of time steps
+
+dealiasing = yes
+writeInterval = 0.1 # Set how often the solver writes out data
+userParam01 = 1.49   # Froude^2 number
+userParam02 = -1      # Airfoil top temperature
+userParam03 = 1     # Airfoil bottom temperature
+userParam04 = 0.7    # Prandtl number
+userParam05 = 12.0    # Angle of Attack
+userParam06 = 2412   # NACA 4-digit series
+
+[PROBLEMTYPE]
+equation = incompNS + heat
+
+[MESH]
+motion = none               # Essential: mesh is fixed
+
+[PRESSURE]
+#preconditioner = semg_amg
+#residualTol = 1e-4 
+#residualProj = yes
+
+[VELOCITY]
+#residualTol = 1e-6 
+viscosity = -100    # Negative indicates Re number
+density = 1
+
+[TEMPERATURE]
+writeToFieldFile = yes
+conductivity = 1.0  # Placeholder (overwritten by usrdat2)
+rhoCp = 1.0 # Placeholder

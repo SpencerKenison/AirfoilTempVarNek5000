@@ -1,0 +1,388 @@
+c-----------------------------------------------------------------------
+C
+C  USER SPECIFIED ROUTINES:
+C
+C     - boundary conditions
+C     - initial conditions
+C     - variable properties
+C     - local acceleration for fluid (a)
+C     - forcing function for passive scalar (q)
+C     - general purpose routine for checking errors etc.
+C
+c-----------------------------------------------------------------------         
+
+
+
+include "experimental/meshsmoother.f"
+
+
+
+c-----------------------------------------------------------------------
+c Subroutine to define variable parameters 
+c NOT USED
+c-----------------------------------------------------------------------
+      subroutine uservp (ix,iy,iz,ieg)
+ 
+c     This subroutine manages the velocity conditions of the sim
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      udiff =0.
+      utrans=0.
+
+      return
+      end
+c-----------------------------------------------------------------------
+
+
+
+c-----------------------------------------------------------------------
+c Subroutine for imposing a fluid source and body forces
+c Used here to impose buoyancy effects caused by temp changes
+c-----------------------------------------------------------------------
+      subroutine userf  (ix,iy,iz,ieg)
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+      
+      real Prandtl, Fr2, t_hot, t_cold
+      common /nondim_params/ Prandtl, Fr2, t_hot, t_cold
+
+c     Note: this is an acceleration term, NOT a force!
+c     Thus, ffx will subsequently be multiplied by rho(x,t).
+
+      ffx = 0.0
+      ffy = temp/Fr2
+      ffz = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+
+
+
+c-----------------------------------------------------------------------
+c Subroutine for imposing a temperature source
+c NOT USED
+c-----------------------------------------------------------------------
+      subroutine userq  (ix,iy,iz,ieg)
+      
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+c     Temperature routine for energy equation
+
+      qvol   = 0.0
+      source = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+
+
+
+c-----------------------------------------------------------------------
+c Subroutine for user interface with data
+c Used to calculate lift/drag
+c-----------------------------------------------------------------------
+      subroutine userchk
+      include 'SIZE'
+      include 'TOTAL'
+
+c     Define objects for surface integrals
+      if (istep.eq.0.and.domid.eq.0) call set_obj
+      if (domid.eq.0.and.istep.gt.100)
+     $   call torque_calc(2.0,x0,.true.,.false.)
+
+      return
+      end
+c-----------------------------------------------------------------------
+
+
+
+c-----------------------------------------------------------------------
+c Subroutine for imposing boundary conditions
+c Used to assign BC values
+c-----------------------------------------------------------------------      
+      subroutine userbc (ix,iy,iz,iside,eg)
+
+c NOTE ::: This subroutine may not be called by every process
+
+      implicit none
+
+      integer ix,iy,iz,iside,eg
+
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      integer ie
+      character*3 cb3
+      real x0,y0,xr,yr,x_cs,y_c
+      
+      real Prandtl,Fr2,t_hot,t_cold
+      common /nondim_params/ Prandtl,Fr2,t_hot,t_cold      
+      
+      real aoa,C_a,S_a
+      common /rotation/ aoa,C_a,S_a
+      
+      integer NACA
+      real m_c,p_m,shift
+      common /airfoil/ NACA,m_c,p_m,shift
+
+c Boundary Conditions (vel and temp)
+      ux=1.0
+      uy=0.0
+      uz=0.0
+
+c Implement variable temp distro for any AOA
+      ie    = gllel(eg)              ! Get local element number
+      cb3   = cbc(iside,ie,1)        ! Access vel BC
+
+      if (cb3.eq.'W  ') then         ! If wall, we are on airfoil
+         x0 = xm1(ix,iy,iz,ie)       ! Get local x-coordinate
+         y0 = ym1(ix,iy,iz,ie)       ! Get local y-coordinate
+
+         xr = x0*C_a - y0*S_a        ! Rotate x back to 0 AOA
+         yr = x0*S_a + y0*C_a        ! Rotate y back to 0 AOA
+         
+         x_cs = xr + shift           ! Get shifted x-value
+         
+         if (x_cs < p_m) then        ! Use fwd camber eqn
+            y_c = m_c/p_m/p_m*(2*p_m*x_cs - x_cs*x_cs)
+         else                        ! Use aft camber eqn
+            y_c = m_c/(1-p_m)**2*((1-2*p_m)+2*p_m*x_cs-x_cs*x_cs)
+         end if
+
+         ! Assign temp
+         if (yr .gt. y_c) then       ! Above camber = cold
+            temp = t_cold
+         elseif (yr .lt. y_c) then   ! Below camber = hot
+            temp = t_hot
+         else                        ! At camber = cold
+            temp = t_cold
+         endif
+      else                           ! Any other vel bc
+         temp = 0.0
+      endif
+      
+      return
+      end
+c-----------------------------------------------------------------------
+
+
+
+c-----------------------------------------------------------------------
+c Subroutine to set initial conditions for the fluid
+c-----------------------------------------------------------------------
+      subroutine useric (ix,iy,iz,ieg)
+      include 'SIZE'
+      include 'TOTAL'
+      include 'NEKUSE'
+
+      ux   = 1.0
+      uy   = 0.0
+      uz   = 0.0
+      temp = 0.0
+
+      return
+      end
+c-----------------------------------------------------------------------
+
+
+
+c-----------------------------------------------------------------------
+c Subroutine for manipulating data and mesh before sim run
+c Used to create temp field and then assign correct BC types
+c-----------------------------------------------------------------------     
+      subroutine usrdat
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer el, fa, nface, id_face
+
+c Assigns correct boundary types for imported gmsh mesh
+c call setbc(BoundaryID, [velBC = 1 tempBC = 2], BC)
+      call setbc(1,1, 'v  ')    ! boundary 1, velocity inlet
+      call setbc(2,1, 'O  ')    ! boundary 2, velocity outlet
+      call setbc(3,1, 'SYM')    ! boundary 3, farfield
+      call setbc(4,1, 'W  ')    ! boundary 4, airfoil
+
+      call setbc(1,2, 't  ') ! Inlet: Fixed Temperature (Dirichlet)
+      call setbc(2,2, 'I  ') ! Outlet: Insulated/Convective
+      call setbc(3,2, 'I  ') ! Farfield: Insulated
+      call setbc(4,2, 't  ') ! Airfoil: Fixed Temperature (Dirichlet)
+
+c      open(unit=99,file='bc_log.dat', status='unknown')
+c      nface = 4             ! 2D means four faces
+c      
+c      do el = 1, nelv       ! Loop over all elements
+c      do fa = 1, nface      ! Loop over all faces
+c         ! Apply BC according to boundary tags
+c         id_face = BoundaryID(fa,el)
+c         if (id_face .eq. 1) then                   ! Airfoil
+c            write(99,'(I6,I2,I2,A3)') el,fa,id_face,'W  '
+c         elseif (id_face .eq. 2) then               ! Top and Bottom 
+c            write(99,'(I6,I2,I2,A3)') el,fa,id_face,'SYM'
+c         elseif (id_face .eq. 3) then               ! Outlet (right)
+c            write(99,'(I6,I2,I2,A3)') el,fa,id_face,'o  '
+c         elseif (id_face .eq. 4) then               ! Inlet (left)
+c            write(99,'(I6,I2,I2,A3)') el,fa,id_face,'v  '
+c         else
+c            write(99,'(I6,I2,I2,A3)') el,fa,id_face,'E  '
+c         end if
+c      end do
+c      end do 
+
+ 
+      return
+      end
+c-----------------------------------------------------------------------
+
+
+
+c-----------------------------------------------------------------------
+c Subroutine for further mesh editing
+c Used to implement mesh smoother, output edited mesh, and 
+c-----------------------------------------------------------------------
+      subroutine usrdat2
+      include 'SIZE'
+      include 'TOTAL'
+  
+      real Prandtl,Fr2,t_hot,t_cold
+      common /nondim_params/ Prandtl,Fr2,t_hot,t_cold
+
+      real aoa,C_a,S_a
+      common /rotation/ aoa,C_a,S_a
+      
+      integer NACA
+      real m_c,p_m,shift
+      common /airfoil/ NACA,m_c,p_m,shift
+
+      real mtyp,nouter,nlap,nopt,idftyp,alpha,beta
+      integer nbc
+      character*3 dcbc
+
+      ! Set mesh smoother parameters
+      nbc = 1            ! Num of BCs for resolution conservation
+      data dcbc /'W  '/  ! BCs listed here
+      mtyp = 1           ! Only option, uses condition number of Jacobian
+      nouter = 60        ! Number of loops for Laplacian and opt smoothing
+      nlap = 30          ! Iterations of Laplacian smoothing in each loop
+      nopt = 30          ! Iterations of optimization based smoothing in each loop
+      idftyp = 1         ! 0 = exponential weight func, 1 = tanh weight func
+      alpha = 8          ! Used to calc weight function
+      beta = 0.5         ! Used to calc weight function
+
+      call smoothmesh(mtyp,nouter,nlap,nopt,nbc,dcbc,idftyp,alpha,beta)
+
+c Output modified mesh
+      ifxyo = .true.
+      call outpost(vx,vy,vz,pr,t,'xyz')
+
+c Set Peclet number for scalar temperature routine
+      Fr2 = uparam(1)
+      t_cold = uparam(2)
+      t_hot = uparam(3)
+      Prandtl = uparam(4)
+      cpfld(2,1) = cpfld(1,1)/Prandtl
+
+c Precalculate cosine and sine for given alpha
+      aoa = uparam(5)*pi/180
+      C_a = cos(aoa)
+      S_a = sin(aoa)
+
+c Find max camber and point of max camber for given NACA airfoil
+      NACA  = uparam(6)
+      m_c   = real(NACA / 1000) / 100  ! Max camber
+      p_m   = real(mod(NACA / 100, 10)) / 10.0  ! Point of max camber
+      shift = 0.25    ! Moves airfoil so quarter chord is at (0,0)
+
+c Print for debugging user parameters and calculations
+c      write(*,*) 'nu = ', nu
+c      write(*,*) 'Fr2 = ', Fr2
+c      write(*,*) 't_hot = ', t_hot
+c      write(*,*) 't_cold = ', t_cold
+c      write(*,*) 'Prandtl = ', Prandtl
+c      write(*,*) 'cpfld(2,1) = ', cpfld(2,1)
+c      write(*,*) 'aoa = ', aoa
+c      write(*,*) 'C_a = ', C_a
+c      write(*,*) 'S_a = ', S_a
+c      write(*,*) 'NACA = ', NACA
+c      write(*,*) 'm_c = ', m_c
+c      write(*,*) 'p_m = ', p_m
+c      write(*,*) 'shift = ', shift
+
+      return
+      end
+c-----------------------------------------------------------------------
+
+
+
+c-----------------------------------------------------------------------
+c Subroutine for further user interface with mesh and values
+c NOT USED
+c-----------------------------------------------------------------------
+      subroutine usrdat3
+      include 'SIZE'
+      include 'TOTAL'
+c
+      return
+      end
+c-----------------------------------------------------------------------
+
+
+
+c-----------------------------------------------------------------------
+c Subroutine that defines objects for surface integrals
+c Used for lift and drag calc
+c-----------------------------------------------------------------------
+      subroutine set_obj  ! define objects for surface integrals
+c
+      include 'SIZE'
+      include 'TOTAL'
+
+      integer e,f,eg
+
+      nobj = 1
+      iobj = 0
+      do ii=nhis+1,nhis+nobj
+         iobj = iobj+1
+         hcode(10,ii) = 'I'
+         hcode( 1,ii) = 'F'
+         hcode( 2,ii) = 'F'
+         hcode( 3,ii) = 'F'
+         lochis(1,ii) = iobj
+      enddo
+      nhis = nhis + nobj
+
+      if (maxobj.lt.nobj) call exitti('increase maxobj in SIZE$',nobj)
+
+      nxyz  = nx1*ny1*nz1
+      nface = 4
+
+      do e=1,nelv
+      do f=1,nface
+         if (cbc(f,e,1).eq.'W  ') then
+            iobj  = 1
+            if (iobj.gt.0) then
+               nmember(iobj) = nmember(iobj) + 1
+               mem = nmember(iobj)
+               eg  = lglel(e)
+               object(iobj,mem,1) = eg
+               object(iobj,mem,2) = f
+c              write(6,1) iobj,mem,f,eg,e,nid,' OBJ'
+c   1          format(6i9,a4)
+
+            endif
+         endif
+      enddo
+      enddo
+
+      return
+      end
+c---------------------------------------------------------------------- 
